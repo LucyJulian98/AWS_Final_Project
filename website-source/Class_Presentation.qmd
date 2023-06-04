@@ -1,0 +1,419 @@
+---
+title: "Slides: Assessing Trends in World News"
+subtitle: "Analyzing Reddit Data Using Pyspark-AWS Framework"
+format: 
+    revealjs:
+        theme: "moon"
+        embed-resources: true
+---
+
+```{python}
+#| echo: false
+#| warning: false 
+
+### Importing require libraries 
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+import numpy as np
+import IPython
+import ipyplot
+import datetime 
+
+```
+
+
+## About the Team 
+
+:::: {.columns}
+
+::: {.column width="25%"}
+![Aaron A. Genin](Aaron.jpeg){width=300, height=300}
+
+![](Aaron_LinkedIn.png){width=300, height=200}
+:::
+
+::: {.column width="25%"}
+![Lucienne L. Julian](Lucienne.jpg){width=300, height=300}
+
+![](Lucienne_LinkedIn.png){width=300, height=200}
+:::
+::: {.column width="25%"}
+![Peijin Li](Peijin.jpg){width=300, height=300}
+
+![](Peijin_LinkedIn.png){width=300, height=200}
+:::
+::: {.column width="25%"}
+![Sonali S. Rathinam](Sonali.jpg){width=300, height=300}
+
+![](Sonali_LinkedIn.png){width=300, height=200}
+:::
+::::
+
+## Overview
+
+- Summary of Results 
+- Introduction to the Data
+- Natural Language Processing 
+- Machine Learning 
+- AWS Infrastructure and Methodology  
+
+## Key Takeaways 
+:::: {.columns}
+
+::: {.column width="60%"}
+
+- r/worldnews subreddit 
+- Primarily Western Viewpoint 
+- Gaps in News Coverage (ACLED) 
+- Russia-Ukraine Conflict dominate the Topic Space 
+- Spacial granularity in NER   
+- Plurality of Negative Sentiment  
+
+:::
+::: {.column width="40%"}
+```{python}
+#| echo: false
+#| warning: false
+import IPython 
+IPython.display.Image("../data/plots/submission_wordcloud.png", width = 20, height = 20)
+```
+
+:::
+::::
+
+## Introduction to Data  
+
+
+- Subreddit: Assumed Neutrality, Popularity 
+- User Activity: 27000 Distinct Posters, 1.2 million Distinct Commentors 
+- Live Threads: Daily Coverage of Conflict 
+- Surge in Submissions/Comments at the Onset of War 
+- Russia-Ukraine Conflict: 27% Posts, 45% Comments
+
+
+## Gaps in Data Collection 
+
+```{python}
+#| echo: false
+#| warning: false 
+
+### Reading the data 
+df_sub_date = pd.read_csv("../data/csv/submission_frequency_per_day.csv")
+df_com_date = pd.read_csv("../data/csv/comment_frequency_per_day.csv")
+
+### Joining the two tables 
+df_date_combined = pd.merge(df_sub_date, df_com_date, how = 'left', on="date_clean")
+
+### Renaming the columns accordingly 
+df_date_combined = df_date_combined.rename(columns = {"date_clean" : "Date", 
+                                                      "Frequency of Submissions" : "Submission",
+                                                      "Frequency of Comments" : "Comment"})
+### Converting to long format (for plotting)
+df_date_combined = pd.melt(df_date_combined, id_vars= ["Date"], \
+                           value_vars = ["Submission", "Comment"], \
+                           var_name = "Type of Posting", \
+                           value_name = "Frequency")
+
+#### Logging the Frequency column
+df_date_combined["Logged_Frequency"] = np.log(df_date_combined["Frequency"])
+
+### Plotting the line-chart using graph_objects
+df_date_sub = df_date_combined[df_date_combined["Type of Posting"] == "Submission"]
+df_date_com = df_date_combined[df_date_combined["Type of Posting"] == "Comment"]
+
+template = "simple_white"
+
+fig = go.Figure(go.Scatter(
+    x = df_date_com["Date"],
+    y = df_date_com["Logged_Frequency"],
+    text = df_date_com["Frequency"],
+    name = "Comments",
+    marker_color = "blue",
+    hovertemplate ='<br><b>Frequency</b>: %{text}<br>'
+))
+
+fig.add_trace(go.Scatter(
+    x = df_date_sub["Date"],
+    y = df_date_sub["Logged_Frequency"],
+    text = df_date_sub["Frequency"],
+    name = "Submissions",
+    marker_color = "green",
+    hovertemplate ='<br><b>Frequency</b>: %{text}<br>'
+))
+
+fig.update_layout(hovermode = "x unified", 
+                  template = template, 
+                  title = "Daily Submission and Comment Frequency",
+                  xaxis_title = "Date",
+                  yaxis_title = "Logged Frequency",
+                  legend_title = "Type of Post")
+fig.add_vline(x = datetime.datetime.strptime("2022-02-24", "%Y-%m-%d").timestamp() * 1000, line_width=2, \
+              line_color="red", opacity = 0.8, annotation_text = "Start of Russia-Ukraine Conflict")
+fig.show()
+
+
+
+```
+
+## War Related Posts/Comments Follow Similar Trends To All Posts/Comments
+
+:::: {.columns}
+
+::: {.column width="70%"}
+
+```{python}
+#| echo: false
+#| warning: false 
+
+### Importing the data 
+df_sub_ts = pd.read_csv("../data/csv/df_sub_ts.csv")
+df_comments_ts = pd.read_csv("../data/csv/df_comments_ts.csv")
+df_sub_war_ts = pd.read_csv("../data/csv/df_date_war_viz.csv")
+df_comments_war_ts = pd.read_csv("../data/csv/df_comments_war_viz.csv")
+
+#Plotly graph objects graph
+sub_count = df_sub_ts['count']
+com_count = df_comments_ts['sum(num_comments)']
+#Logging Count data
+df_sub_war_ts['log_count'] = np.log10(1+ df_sub_war_ts['count'])
+df_comments_war_ts['log_count'] = np.log10(1+ df_comments_war_ts['sum(num_comments)'])
+#Plotly graph objects graph
+subw_count = df_sub_war_ts['count']
+comw_count = df_comments_war_ts['sum(num_comments)']
+
+fig = go.Figure()
+fig.update_layout(title = "Posts and Comments Related to War Compared to All Posts and Submissions", hovermode = "x unified", legend_title="", template="simple_white")
+
+fig.add_trace(go.Scatter(x=df_comments_ts['date_ym'], y=df_comments_ts["log_count"], name = "Comments", line_color="blue",
+      hovertemplate="Comment Frequency : %{text}<extra></extra>",
+                               text = com_count))
+fig.add_trace(go.Scatter(x=df_comments_war_ts['date_ym'], y=df_comments_war_ts["log_count"], name = "War Comments", line_color="#48cae4",
+      hovertemplate="War-Comments Frequency: %{text}<extra></extra>",
+                               text = comw_count))
+fig.add_trace(go.Scatter(x=df_sub_ts['date_ym'], y=df_sub_ts["log_count"], name="Submissions", line_color="green",
+      hovertemplate=" Submission Frequency : %{text}<extra></extra>", text = sub_count))                               
+fig.add_trace(go.Scatter(x=df_sub_war_ts['date_ym'], y=df_sub_war_ts["log_count"], name="War Submissions", line_color="#99d98c",
+      hovertemplate="War-Submissions Frequency: %{text}<extra></extra>", text = subw_count))
+
+
+fig.update_xaxes(title_text="Year-Month")
+fig.update_yaxes(title_text="Logged Frequency of Occurence")
+fig.update_layout(xaxis=dict(tickformat="%b-%Y"))
+fig.show()
+
+
+```
+
+:::
+
+::: {.column width="30%"}
+
+::: {.fragment .highlight-red}
+27% Posts 
+
+45% Comments 
+:::
+:::
+::::
+
+## Introduction to Data (Continued..)
+:::: {.columns}
+
+::: {.column width="60%"}
+- Western inclination challenges assumed neutrality   
+- Divergent Pattern of User Behaviour in Social Media Sites  
+- ACLED Aggregated Conflict Events demonstrate gaps in news coverage  
+
+:::
+
+::: {.column width="40%"}
+
+![Most Shared News Sites](most_shared_news.png){width=500, height=500}
+:::
+:::: 
+
+# Results... 
+
+## Natural Language Processing Results
+
+Topic Modeling : 
+
+- Russia-Ukraine War Topics Dominate  
+- Facets of Conflict  
+
+Named Entity Recognition (NER) :
+
+- NER reinforces the prevalance of War Posts 
+- Location Entities widely used 
+
+## War Posts Frequent in the Topic Space 
+
+![](Topic%20Modelling.PNG){width=500, height=500}
+
+## Location Based Entities Dominate the Posts 
+
+```{python}
+#| echo: false
+#| warning: false 
+
+df_1 = pd.read_csv("../data/csv/ner_viz_people.csv") 
+df_2 = pd.read_csv("../data/csv/ner_viz_loc.csv")
+df_3 = pd.read_csv("../data/csv/ner_viz_org.csv")
+
+df_1["Entity_Type"] = "People"
+df_2["Entity_Type"] = "Location"
+df_3["Entity_Type"] = "Organization"
+
+### Renaming columns for concatenation
+df_1 = df_1.rename(columns = {"People" : "Entity"})
+df_2 = df_2.rename(columns = {"Location" : "Entity"})
+df_3 = df_3.rename(columns = {"Organization" : "Entity"})
+
+df_list = [df_1, df_2, df_3]
+final_df = pd.concat(df_list).reset_index()
+final_df = final_df.sort_values(by = ["Occurences"], ascending = False)
+
+template = 'simple_white'
+
+### Plotting bar graph 
+fig = px.bar(final_df, \
+             x = 'Occurences', y = 'Entity', orientation = 'h',\
+             color = "Entity_Type", \
+             title = "Prevalence of Entities in Posts",
+             template = template            
+             )
+
+fig.update_layout(yaxis = {"categoryorder":"total ascending"}) 
+fig.show()
+
+```
+
+## Machine Learning Results 
+:::: {.columns}
+::: {.column width="50%"}
+
+Sentiment Analysis: 
+
+- 4 models : 3 pretrained and 1 lexicon 
+- VADER assumed to be most accurate  
+- Vivek Model for Submissions : 
+
+::: {.fragment .highlight-red} 
+45% 30% 25% 
+:::
+:::
+
+::: {.column width="50%"}
+
+```{python}
+#| echo: false
+#| warning: false
+
+df_sentiment_1 = pd.read_csv("../data/csv/sentiment_results_1.csv")
+
+### Stripping the % symbols and converting to float 
+df_sentiment_1["negative"] = df_sentiment_1["negative"].str.rstrip('%').astype('float')
+
+df_sentiment_1["positive"] = df_sentiment_1["positive"].str.rstrip('%').astype('float')
+
+df_sentiment_1["neutral"] = df_sentiment_1["neutral"].str.rstrip('%').astype('float')
+
+
+
+df_sentiment_2 = pd.read_csv("../data/csv/sentiment_labels_live_threads.csv")
+
+
+total = df_sentiment_2["Number of Comments"].sum()
+negative = round(int(df_sentiment_2["Number of Comments"].loc[df_sentiment_2["Sentiment_Label"] == "Negative"])/total*100, 2)
+positive = round(int(df_sentiment_2["Number of Comments"].loc[df_sentiment_2["Sentiment_Label"] == "Positive"])/total*100, 2)
+neutral = round(int(df_sentiment_2["Number of Comments"].loc[df_sentiment_2["Sentiment_Label"] == "Neutral"])/total*100, 2)
+
+row_dict = {"Model" : ["Vader-Sentiment with SVC"],
+            "negative" : [negative], 
+            "neutral" : [neutral], 
+            "positive" : [positive]}
+
+df_sentiment_3 = pd.DataFrame(row_dict)
+
+df_list = [df_sentiment_1, df_sentiment_3]
+
+final_df_sentiment = pd.concat(df_list)
+### Renaming columns for proper axis ticks 
+final_df_sentiment = final_df_sentiment.rename(columns = {"neutral" : "Neutral", 
+"positive" : "Positive", 
+"negative" : "Negative"})
+
+final_df_sentiment = pd.melt(final_df_sentiment, id_vars = ["Model"], value_vars = ["Negative", "Neutral", "Positive"], value_name = "Percentage", var_name = "Sentiment_Label")
+
+template = 'simple_white'
+
+### Plotting grouped bar graph 
+fig = px.bar(final_df_sentiment, \
+             x = 'Sentiment_Label', y = 'Percentage', \
+             color = "Model", \
+             barmode = "group", range_y = [0, 100], labels = {'Sentiment_Label' : "Sentiment Label", 
+                       'Percentage' : "Percentage of Comments"},
+             title = "Distribution of Sentiments in Live Thread Comments",
+             template = template            
+             )
+
+fig.update_layout(yaxis_ticksuffix = '%',
+                legend=dict(yanchor="top",
+                            y=0.99,
+                            xanchor="left",
+                            x=0.01)) 
+fig.show()
+```
+
+
+:::
+:::: 
+
+## Predominantly Negative Sentiments Across Models 
+
+
+```{python}
+#| echo: false
+#| warning: false
+
+df_2 = pd.read_csv("../data/csv/sentiment_labels_count.csv")
+total = df_2["Number of Comments"].sum()
+df_2["Percentage"] = round(df_2["Number of Comments"]/total*100, 2)
+
+template = 'simple_white'
+
+fig = px.bar(df_2, \
+             x = 'Sentiment_Label', y = 'Percentage', \
+             range_y = [0, 100], \
+             labels = {'Sentiment_Label' : "Sentiment Label", 
+                       'Percentage' : "Percentage of Comments"},
+             title = "Distribution of Sentiments in Comments Dataset",
+             template = template            
+             )
+
+fig.update_layout(yaxis_ticksuffix = '%') 
+fig.update_traces(marker_color='#fcbf49')
+fig.show()
+```
+
+
+# AWS Infrastructure and Methodologies Employed 
+
+## AWS Pipeline 
+![](aws_pipeline.png){width=500, height=500}
+
+
+## Methodologies Employed and Other Tools  
+
+- johnsnowlabs (pretrained models)
+- Latent Dirchlet Allocation
+- VADER 
+- GitHub 
+- Quarto  
+
+## Website Preview 
+
+[Preview](https://lucyjulian.georgetown.domains/ppol567-final-project-team6/docs){preview-link="true"}
+
+![](Aws_Final.png){width=500, height=500}
